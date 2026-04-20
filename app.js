@@ -8,7 +8,10 @@ const app = express();
 // Middlewares
 
 app.use(cookieParser());
-app.use(cors());
+app.use(cors({
+  origin: 'http://148.135.136.249',
+  credentials: true
+}));
 app.use(express.json());
 
 // Routes
