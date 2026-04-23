@@ -5,45 +5,42 @@ const jwt = require('jsonwebtoken')
 
 const registerUser = async (req, res) => {
   try {
+    console.log("REGISTER HIT");
+
     const { name, email, password } = req.body;
 
-    // Check if user already exists
-    userModel.findUserByEmail(email, async (err, result) => {
-      if (err) return res.status(500).json(err);
+    const existingUser = await userModel.findUserByEmail(email);
 
-      if (result.length > 0) {
-        return res.status(400).json({
-          message: "User already exists with this email"
-        });
-      }
+    if (existingUser.length > 0) {
+      return res.status(400).json({
+        message: "User already exists"
+      });
+    }
 
-      // Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Save user
-      userModel.createUser(
-        { name, email, password: hashedPassword },
-        (err, result) => {
-          if (err) return res.status(500).json(err);
-
-          res.status(201).json({
-            message: "User registered successfully ✅"
-          });
-        }
-      );
+    await userModel.createUser({
+      name,
+      email,
+      password: hashedPassword
     });
-  } catch (error) {
-    res.status(500).json({
-      message: "Server error",
-      error
+
+    return res.status(201).json({
+      message: "User registered successfully ✅"
     });
+
+  } catch (err) {
+    console.error("REGISTER ERROR:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 const loginUser = async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    console.log("LOGIN HIT");
 
-  userModel.findUserByEmail(email, async (err, result) => {
-    if (err) return res.status(500).json(err);
+    const { email, password } = req.body;
+
+    const result = await userModel.findUserByEmail(email);
 
     if (result.length === 0) {
       return res.status(404).json({ message: "User not found" });
@@ -52,25 +49,24 @@ const loginUser = async (req, res) => {
     const user = result[0];
 
     const isMatch = await bcrypt.compare(password, user.password);
+
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // JWT token
     const token = jwt.sign(
       { id: user.id, email: user.email },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
 
-    // Cookie set
     res.cookie("token", token, {
       httpOnly: true,
-      secure: false, // production me true
+      secure: false,
       sameSite: "lax"
     });
 
-    res.json({
+    return res.json({
       message: "Login successful ✅",
       user: {
         id: user.id,
@@ -78,9 +74,12 @@ const loginUser = async (req, res) => {
         email: user.email
       }
     });
-  });
-};
 
+  } catch (err) {
+    console.error("LOGIN ERROR:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
 // controllers/authController.js
 
 const getMe = async (req, res) => {
