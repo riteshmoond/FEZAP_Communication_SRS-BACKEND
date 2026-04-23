@@ -18,6 +18,10 @@ app.use(express.json());
 const authRoutes = require("./src/routes/authRoutes");
 app.use("/api/auth", authRoutes);
 
+//projectRoutes
+const projectRoutes = require("./src/routes/projectRoutes")
+app.use("/api", projectRoutes)
+
 // Test route
 app.get("/", (req, res) => {
   res.send("API is running 🚀");
