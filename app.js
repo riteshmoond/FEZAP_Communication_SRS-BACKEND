@@ -22,6 +22,12 @@ app.use("/api/auth", authRoutes);
 const projectRoutes = require("./src/routes/projectRoutes")
 app.use("/api", projectRoutes)
 
+//mailRoutes
+const mailRoutes = require("./src/routes/mailRoutes")
+app.use("/api", mailRoutes)
+
+
+
 // Test route
 app.get("/", (req, res) => {
   res.send("API is running 🚀");

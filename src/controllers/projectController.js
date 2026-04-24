@@ -13,7 +13,7 @@ const createProject = async (req, res) => {
       isClientSmtp,
       vendor,
       senderEmailUsername,
-      via, // 🔥 NEW
+      
 
       host,
       port,
