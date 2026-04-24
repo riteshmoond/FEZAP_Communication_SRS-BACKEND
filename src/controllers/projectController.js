@@ -2,7 +2,6 @@ const {generateSecretKey} = require('../utils/generateSecretKey')
 const db = require("../config/db");
 
 
-
 const createProject = async (req, res) => {
   try {
     const {
@@ -13,6 +12,7 @@ const createProject = async (req, res) => {
       isClientSmtp,
       vendor,
       senderEmailUsername,
+      via, // 🔥 NEW
 
       host,
       port,
@@ -23,29 +23,40 @@ const createProject = async (req, res) => {
       sendgridApiKey,
     } = req.body;
 
-    // ✅ 1. Basic required fields
-   const requiredFields = {
-  projectName,
-  senderName,
-  senderEmail,
-  replyTo,
-  isClientSmtp,
-  vendor,
-  senderEmailUsername,
-};
+    // ✅ 1. Required fields
+    const requiredFields = {
+      projectName,
+      senderName,
+      senderEmail,
+      replyTo,
+      isClientSmtp,
+      vendor,
+      senderEmailUsername,
+      via, // 🔥 required
+    };
 
-const missingFields = Object.entries(requiredFields)
-  .filter(([key, value]) => !value)
-  .map(([key]) => key);
+    const missingFields = Object.entries(requiredFields)
+      .filter(([_, value]) => !value)
+      .map(([key]) => key);
 
-if (missingFields.length > 0) {
-  return res.status(400).json({
-    message: "Missing required fields",
-    missingFields,
-  });
-}
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        message: "Missing required fields",
+        missingFields,
+      });
+    }
 
-    // ✅ 2. Email validation (basic)
+    // ✅ 2. Channel validation
+    const allowedChannels = ["Mail", "WhatsApp"];
+
+    if (!allowedChannels.includes(via)) {
+      return res.status(400).json({
+        message: "Invalid via",
+        allowedValues: allowedChannels,
+      });
+    }
+
+    // ✅ 3. Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!emailRegex.test(senderEmail)) {
@@ -56,12 +67,19 @@ if (missingFields.length > 0) {
       return res.status(400).json({ message: "Invalid reply email" });
     }
 
-    // ✅ 3. SMTP logic validation
+    // ✅ 4. SMTP validation
     if (isClientSmtp === "Custom") {
       if (vendor === "Aws" || vendor === "Mailgun") {
-        if (!host || !port || !username || !password) {
+        const smtpFields = { host, port, username, password };
+
+        const missingSmtpFields = Object.entries(smtpFields)
+          .filter(([_, value]) => !value)
+          .map(([key]) => key);
+
+        if (missingSmtpFields.length > 0) {
           return res.status(400).json({
-            message: "SMTP config required (host, port, username, password)",
+            message: "Missing SMTP fields",
+            missingFields: missingSmtpFields,
           });
         }
       }
@@ -69,30 +87,32 @@ if (missingFields.length > 0) {
       if (vendor === "Sendgrid") {
         if (!sendgridApiKey) {
           return res.status(400).json({
-            message: "Sendgrid API key required",
+            message: "Missing required fields",
+            missingFields: ["sendgridApiKey"],
           });
         }
       }
     }
 
-    // ✅ 4. Generate key
+    // ✅ 5. Secret key
     const secretKey = generateSecretKey();
 
-    // ✅ 5. Insert
+    // ✅ 6. Insert
     await db.query(
       `INSERT INTO projects 
-      (name, user_id, secret_key,
+      (name, user_id, secret_key, via,
        sender_name, sender_email, reply_to,
        smtp_type, vendor, sender_email_username,
        host, port, smtp_username, smtp_password,
        custom_sender_email, custom_reply_to,
        sendgrid_api_key)
        
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         projectName,
         req.user.id,
         secretKey,
+        via, // 🔥 added
 
         senderName,
         senderEmail,
@@ -118,6 +138,7 @@ if (missingFields.length > 0) {
       message: "Project created successfully",
       secretKey,
     });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
