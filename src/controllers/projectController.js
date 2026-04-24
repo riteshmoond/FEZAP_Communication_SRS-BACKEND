@@ -6,6 +6,7 @@ const db = require("../config/db");
 const createProject = async (req, res) => {
   try {
     const {
+      via,
       projectName,
       senderName,
       senderEmail,
@@ -24,7 +25,8 @@ const createProject = async (req, res) => {
     } = req.body;
 
     // ✅ 1. Basic required fields
-   const requiredFields = {
+const requiredFields = {
+  via,
   projectName,
   senderName,
   senderEmail,
@@ -44,6 +46,13 @@ if (missingFields.length > 0) {
     missingFields,
   });
 }
+
+    if (!["Mail", "WhatsApp"].includes(via)) {
+      return res.status(400).json({
+        message: "Invalid via value",
+        allowedValues: ["Mail", "WhatsApp"],
+      });
+    }
 
     // ✅ 2. Email validation (basic)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -82,17 +91,19 @@ if (missingFields.length > 0) {
     await db.query(
       `INSERT INTO projects 
       (name, user_id, secret_key,
+       via,
        sender_name, sender_email, reply_to,
        smtp_type, vendor, sender_email_username,
        host, port, smtp_username, smtp_password,
        custom_sender_email, custom_reply_to,
        sendgrid_api_key)
        
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         projectName,
         req.user.id,
         secretKey,
+        via,
 
         senderName,
         senderEmail,
@@ -129,6 +140,7 @@ const updateProject = async (req, res) => {
     const { id } = req.params;
 
     const {
+      via,
       projectName,
       senderName,
       senderEmail,
@@ -148,6 +160,7 @@ const updateProject = async (req, res) => {
 
     // ✅ 1. Required fields check
     const requiredFields = {
+      via,
       projectName,
       senderName,
       senderEmail,
@@ -165,6 +178,13 @@ const updateProject = async (req, res) => {
       return res.status(400).json({
         message: "Missing required fields",
         missingFields,
+      });
+    }
+
+    if (!["Mail", "WhatsApp"].includes(via)) {
+      return res.status(400).json({
+        message: "Invalid via value",
+        allowedValues: ["Mail", "WhatsApp"],
       });
     }
 
@@ -233,6 +253,7 @@ const updateProject = async (req, res) => {
     await db.query(
       `UPDATE projects SET
         name=?,
+        via=?,
         sender_name=?,
         sender_email=?,
         reply_to=?,
@@ -249,6 +270,7 @@ const updateProject = async (req, res) => {
        WHERE id=?`,
       [
         projectName,
+        via,
         senderName,
         senderEmail,
         replyTo,
@@ -289,7 +311,7 @@ const getProjects = async (req, res) => {
 
     // query
     const [projects] = await db.query(
-      `SELECT id, name, secret_key, status,
+      `SELECT id, name, secret_key, status, via,
        sender_name, sender_email, reply_to,
        smtp_type, vendor, sender_email_username,
        host, port, smtp_username, smtp_password,
