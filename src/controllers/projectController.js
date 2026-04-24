@@ -90,7 +90,7 @@ if (missingFields.length > 0) {
     // ✅ 5. Insert
     await db.query(
       `INSERT INTO projects 
-      (name, user_id, secret_key,
+      (name, user_id, secret_key, status,
        via,
        sender_name, sender_email, reply_to,
        smtp_type, vendor, sender_email_username,
@@ -98,11 +98,12 @@ if (missingFields.length > 0) {
        custom_sender_email, custom_reply_to,
        sendgrid_api_key)
        
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         projectName,
         req.user.id,
         secretKey,
+        "active",
         via,
 
         senderName,
