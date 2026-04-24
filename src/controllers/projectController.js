@@ -289,7 +289,12 @@ const getProjects = async (req, res) => {
 
     // query
     const [projects] = await db.query(
-      `SELECT id, name, status, sender_email, created_at 
+      `SELECT id, name, secret_key, status,
+       sender_name, sender_email, reply_to,
+       smtp_type, vendor, sender_email_username,
+       host, port, smtp_username, smtp_password,
+       custom_sender_email, custom_reply_to,
+       sendgrid_api_key, created_at
        FROM projects 
        WHERE user_id = ? AND name LIKE ?
        ORDER BY created_at DESC
@@ -311,6 +316,70 @@ const getProjects = async (req, res) => {
       totalPages: Math.ceil(total / limit),
       totalProjects: total,
       projects,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const getProjectDashboard = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const [[projectStats]] = await db.query(
+      `SELECT
+        COUNT(*) AS totalProjects,
+        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS activeProjects
+       FROM projects
+       WHERE user_id = ?`,
+      [userId]
+    );
+
+    res.json({
+      message: "Dashboard fetched successfully",
+      summary: {
+        totalEmails: 0,
+        failedEmails: 0,
+        activeProjects: Number(projectStats.activeProjects || 0),
+        totalProjects: Number(projectStats.totalProjects || 0),
+      },
+      recentActivity: [],
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const getProjectReport = async (req, res) => {
+  try {
+    const projectId = req.params.id;
+    const userId = req.user.id;
+
+    const [projects] = await db.query(
+      "SELECT id, user_id FROM projects WHERE id = ?",
+      [projectId]
+    );
+
+    if (projects.length === 0) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    if (projects[0].user_id !== userId) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    res.json({
+      message: "Project report fetched successfully",
+      summary: {
+        totalEmails: 0,
+        totalSend: 0,
+        totalDelivered: 0,
+        totalOpen: 0,
+        totalBounce: 0,
+      },
+      reports: [],
     });
   } catch (err) {
     console.error(err);
@@ -426,5 +495,7 @@ module.exports={
     updateProject,
     getProjects,
     getProjectById,
-    updateProjectStatus
+    updateProjectStatus,
+    getProjectDashboard,
+    getProjectReport
 }
