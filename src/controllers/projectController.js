@@ -5,6 +5,7 @@ const db = require("../config/db");
 const createProject = async (req, res) => {
   try {
     const {
+      via,
       projectName,
       senderName,
       senderEmail,
@@ -23,26 +24,33 @@ const createProject = async (req, res) => {
       sendgridApiKey,
     } = req.body;
 
-    // ✅ 1. Required fields
-    const requiredFields = {
-      projectName,
-      senderName,
-      senderEmail,
-      replyTo,
-      isClientSmtp,
-      vendor,
-      senderEmailUsername,
-      via, // 🔥 required
-    };
+    // ✅ 1. Basic required fields
+const requiredFields = {
+  via,
+  projectName,
+  senderName,
+  senderEmail,
+  replyTo,
+  isClientSmtp,
+  vendor,
+  senderEmailUsername,
+};
 
     const missingFields = Object.entries(requiredFields)
       .filter(([_, value]) => !value)
       .map(([key]) => key);
 
-    if (missingFields.length > 0) {
+if (missingFields.length > 0) {
+  return res.status(400).json({
+    message: "Missing required fields",
+    missingFields,
+  });
+}
+
+    if (!["Mail", "WhatsApp"].includes(via)) {
       return res.status(400).json({
-        message: "Missing required fields",
-        missingFields,
+        message: "Invalid via value",
+        allowedValues: ["Mail", "WhatsApp"],
       });
     }
 
@@ -100,19 +108,21 @@ const createProject = async (req, res) => {
     // ✅ 6. Insert
     await db.query(
       `INSERT INTO projects 
-      (name, user_id, secret_key, via,
+      (name, user_id, secret_key, status,
+       via,
        sender_name, sender_email, reply_to,
        smtp_type, vendor, sender_email_username,
        host, port, smtp_username, smtp_password,
        custom_sender_email, custom_reply_to,
        sendgrid_api_key)
        
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         projectName,
         req.user.id,
         secretKey,
-        via, // 🔥 added
+        "active",
+        via,
 
         senderName,
         senderEmail,
@@ -150,6 +160,7 @@ const updateProject = async (req, res) => {
     const { id } = req.params;
 
     const {
+      via,
       projectName,
       senderName,
       senderEmail,
@@ -169,6 +180,7 @@ const updateProject = async (req, res) => {
 
     // ✅ 1. Required fields check
     const requiredFields = {
+      via,
       projectName,
       senderName,
       senderEmail,
@@ -186,6 +198,13 @@ const updateProject = async (req, res) => {
       return res.status(400).json({
         message: "Missing required fields",
         missingFields,
+      });
+    }
+
+    if (!["Mail", "WhatsApp"].includes(via)) {
+      return res.status(400).json({
+        message: "Invalid via value",
+        allowedValues: ["Mail", "WhatsApp"],
       });
     }
 
@@ -254,6 +273,7 @@ const updateProject = async (req, res) => {
     await db.query(
       `UPDATE projects SET
         name=?,
+        via=?,
         sender_name=?,
         sender_email=?,
         reply_to=?,
@@ -270,6 +290,7 @@ const updateProject = async (req, res) => {
        WHERE id=?`,
       [
         projectName,
+        via,
         senderName,
         senderEmail,
         replyTo,
@@ -310,7 +331,12 @@ const getProjects = async (req, res) => {
 
     // query
     const [projects] = await db.query(
-      `SELECT id, name, status, sender_email, created_at 
+      `SELECT id, name, secret_key, status, via,
+       sender_name, sender_email, reply_to,
+       smtp_type, vendor, sender_email_username,
+       host, port, smtp_username, smtp_password,
+       custom_sender_email, custom_reply_to,
+       sendgrid_api_key, created_at
        FROM projects 
        WHERE user_id = ? AND name LIKE ?
        ORDER BY created_at DESC
@@ -332,6 +358,70 @@ const getProjects = async (req, res) => {
       totalPages: Math.ceil(total / limit),
       totalProjects: total,
       projects,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const getProjectDashboard = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const [[projectStats]] = await db.query(
+      `SELECT
+        COUNT(*) AS totalProjects,
+        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS activeProjects
+       FROM projects
+       WHERE user_id = ?`,
+      [userId]
+    );
+
+    res.json({
+      message: "Dashboard fetched successfully",
+      summary: {
+        totalEmails: 0,
+        failedEmails: 0,
+        activeProjects: Number(projectStats.activeProjects || 0),
+        totalProjects: Number(projectStats.totalProjects || 0),
+      },
+      recentActivity: [],
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const getProjectReport = async (req, res) => {
+  try {
+    const projectId = req.params.id;
+    const userId = req.user.id;
+
+    const [projects] = await db.query(
+      "SELECT id, user_id FROM projects WHERE id = ?",
+      [projectId]
+    );
+
+    if (projects.length === 0) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    if (projects[0].user_id !== userId) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    res.json({
+      message: "Project report fetched successfully",
+      summary: {
+        totalEmails: 0,
+        totalSend: 0,
+        totalDelivered: 0,
+        totalOpen: 0,
+        totalBounce: 0,
+      },
+      reports: [],
     });
   } catch (err) {
     console.error(err);
@@ -447,5 +537,7 @@ module.exports={
     updateProject,
     getProjects,
     getProjectById,
-    updateProjectStatus
+    updateProjectStatus,
+    getProjectDashboard,
+    getProjectReport
 }

@@ -83,9 +83,16 @@ const loginUser = async (req, res) => {
 // controllers/authController.js
 
 const getMe = async (req, res) => {
+  const result = await userModel.findUserByEmail(req.user.email);
+  const user = result[0] || req.user;
+
   res.json({
-    message: "User fetched ✅",
-    user: req.user
+    message: "User fetched successfully",
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+    },
   });
 };
 
