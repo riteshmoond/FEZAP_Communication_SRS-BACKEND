@@ -10,6 +10,7 @@ const mailQueue = require("../queues/mailQueue");
 //         message: "Missing required fields",
 //         missingFields: ["to", "subject", "message"].filter(
 //           (field) => !req.body[field]
+
 //         ),
 //       });
 //     }
